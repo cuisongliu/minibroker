@@ -1,0 +1,13 @@
+apiVersion: servicecatalog.k8s.io/v1beta1
+kind: ServiceInstance
+metadata:
+  name: mariadb-10-1-26-instance
+  namespace: catalog
+spec:
+  clusterServiceClassExternalName: mariadb
+  clusterServicePlanExternalName: 10-1-26
+  parameters:
+    name: tpaas
+    user: admin
+    mariadb-password: admin
+    mariadb-root-password: admin

@@ -22,6 +22,7 @@ ARG RUNNING_IMAGE=debian:stable@sha256:e0635a846513de0357689a7dd0c605a538d4ba209
 FROM ${BUILDER_IMAGE} AS builder
 
 WORKDIR /build/minibroker
+ENV GOPROXY="http://172.26.1.9:5000"
 # Copy the go.mod over so docker can cache the module downloads if possible.
 COPY go.mod go.sum ./
 RUN go mod download

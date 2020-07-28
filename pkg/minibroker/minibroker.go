@@ -19,16 +19,17 @@ package minibroker
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 	"math/rand"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/Masterminds/semver"
-	"github.com/kubernetes-sigs/minibroker/pkg/helm"
 	"github.com/pkg/errors"
-	osb "github.com/pmorie/go-open-service-broker-client/v2"
 	"helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,6 +40,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	klog "k8s.io/klog/v2"
+	osb "sigs.k8s.io/go-open-service-broker-client/v2"
 )
 
 const (
@@ -59,7 +61,7 @@ const (
 )
 
 // Error code constants missing from go-open-service-broker-client
-// See https://github.com/pmorie/go-open-service-broker-client/pull/136
+// See https://sigs.k8s.io/go-open-service-broker-client/pull/136
 const (
 	ConcurrencyErrorMessage     = "ConcurrencyError"
 	ConcurrencyErrorDescription = "Concurrent modification not supported"
@@ -78,7 +80,6 @@ const (
 )
 
 type Client struct {
-	helm                      *helm.Client
 	namespace                 string
 	coreClient                kubernetes.Interface
 	providers                 map[string]Provider
@@ -88,7 +89,7 @@ type Client struct {
 func NewClient(namespace string, serviceCatalogEnabledOnly bool) *Client {
 	klog.V(5).Infof("minibroker: initializing a new client")
 	return &Client{
-		helm:                      helm.NewDefaultClient(),
+		//helm:                      helm.NewDefaultClient(),
 		coreClient:                loadInClusterClient(),
 		namespace:                 namespace,
 		serviceCatalogEnabledOnly: serviceCatalogEnabledOnly,
@@ -106,7 +107,12 @@ func NewClient(namespace string, serviceCatalogEnabledOnly bool) *Client {
 func loadInClusterClient() kubernetes.Interface {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		panic(err)
+		var kubeconfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
+		flag.Parse()
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
@@ -117,9 +123,9 @@ func loadInClusterClient() kubernetes.Interface {
 	return clientset
 }
 
-func (c *Client) Init(repoURL string) error {
-	return c.helm.Initialize(repoURL)
-}
+//func (c *Client) Init(repoURL string) error {
+//	return c.helm.Initialize(repoURL)
+//}
 
 func hasTag(tag string, list []string) bool {
 	for _, listTag := range list {
@@ -215,67 +221,83 @@ func (c *Client) ListServices() ([]osb.Service, error) {
 
 	var services []osb.Service
 
-	charts := c.helm.ListCharts()
-	for chart, chartVersions := range charts {
-		if _, ok := c.providers[chart]; !ok && c.serviceCatalogEnabledOnly {
-			continue
-		}
-
-		tags := getTagIntersection(chartVersions)
-
-		svc := osb.Service{
-			ID:          chart,
-			Name:        chart,
-			Description: "Helm Chart for " + chart,
-			Bindable:    true,
-			Plans:       make([]osb.Plan, 0, len(chartVersions)),
-			Tags:        tags,
-		}
-		appVersions := map[string]*repo.ChartVersion{}
-		for _, chartVersion := range chartVersions {
-			if chartVersion.AppVersion == "" {
-				continue
-			}
-
-			curV, err := semver.NewVersion(chartVersion.Version)
-			if err != nil {
-				klog.V(4).Infof("minibroker: skipping %s@%s because %q is not a valid semver", chart, chartVersion.AppVersion, chartVersion.Version)
-				continue
-			}
-
-			currentMax, ok := appVersions[chartVersion.AppVersion]
-			if !ok {
-				appVersions[chartVersion.AppVersion] = chartVersion
-			} else {
-				maxV, _ := semver.NewVersion(currentMax.Version)
-				if curV.GreaterThan(maxV) {
-					appVersions[chartVersion.AppVersion] = chartVersion
-				} else {
-					klog.V(4).Infof("minibroker: skipping %s@%s because %s < %s", chart, chartVersion.AppVersion, curV, maxV)
-					continue
-				}
-			}
-		}
-
-		for _, chartVersion := range appVersions {
-			planToken := fmt.Sprintf("%s@%s", chart, chartVersion.AppVersion)
-			cleaner := regexp.MustCompile(`[^a-z0-9]`)
-			planID := cleaner.ReplaceAllString(strings.ToLower(planToken), "-")
-			planName := cleaner.ReplaceAllString(chartVersion.AppVersion, "-")
-			plan := osb.Plan{
-				ID:          planID,
-				Name:        planName,
-				Description: chartVersion.Description,
-				Free:        boolPtr(true),
-			}
-			svc.Plans = append(svc.Plans, plan)
-		}
-
-		if len(svc.Plans) == 0 {
-			continue
-		}
-		services = append(services, svc)
+	svc := osb.Service{
+		ID:          "mariadb",
+		Name:        "mariadb",
+		Description: "Customize Chart for \"mariadb\"",
+		Bindable:    true,
+		Plans:       make([]osb.Plan, 0, 1),
+		Tags:        []string{"10-1-26"},
 	}
+	planToken := fmt.Sprintf("%s@%s", "mariadb", "10-1-26")
+	cleaner := regexp.MustCompile(`[^a-z0-9]`)
+	planID := cleaner.ReplaceAllString(strings.ToLower(planToken), "-")
+	planName := cleaner.ReplaceAllString("10-1-26", "-")
+	plan := osb.Plan{
+		ID:          planID,
+		Name:        planName,
+		Description: "mariadb sth",
+		Free:        boolPtr(true),
+	}
+	svc.Plans = append(svc.Plans, plan)
+	//charts := c.helm.ListCharts()
+	//for chart, chartVersions := range charts {
+	//	if _, ok := c.providers[chart]; !ok && c.serviceCatalogEnabledOnly {
+	//		continue
+	//	}
+	//
+	//	tags := getTagIntersection(chartVersions)
+	//
+	//	svc := osb.Service{
+	//		ID:          chart,
+	//		Name:        chart,
+	//		Description: "Helm Chart for " + chart,
+	//		Bindable:    true,
+	//		Plans:       make([]osb.Plan, 0, len(chartVersions)),
+	//		Tags:        tags,
+	//	}
+	//	appVersions := map[string]*repo.ChartVersion{}
+	//	for _, chartVersion := range chartVersions {
+	//		if chartVersion.AppVersion == "" {
+	//			continue
+	//		}
+	//
+	//		curV, err := semver.NewVersion(chartVersion.Version)
+	//		if err != nil {
+	//			klog.V(4).Infof("minibroker: skipping %s@%s because %q is not a valid semver", chart, chartVersion.AppVersion, chartVersion.Version)
+	//			continue
+	//		}
+	//
+	//		currentMax, ok := appVersions[chartVersion.AppVersion]
+	//		if !ok {
+	//			appVersions[chartVersion.AppVersion] = chartVersion
+	//		} else {
+	//			maxV, _ := semver.NewVersion(currentMax.Version)
+	//			if curV.GreaterThan(maxV) {
+	//				appVersions[chartVersion.AppVersion] = chartVersion
+	//			} else {
+	//				klog.V(4).Infof("minibroker: skipping %s@%s because %s < %s", chart, chartVersion.AppVersion, curV, maxV)
+	//				continue
+	//			}
+	//		}
+	//	}
+	//
+	//	for _, chartVersion := range appVersions {
+	//		planToken := fmt.Sprintf("%s@%s", chart, chartVersion.AppVersion)
+	//		cleaner := regexp.MustCompile(`[^a-z0-9]`)
+	//		planID := cleaner.ReplaceAllString(strings.ToLower(planToken), "-")
+	//		planName := cleaner.ReplaceAllString(chartVersion.AppVersion, "-")
+	//		plan := osb.Plan{
+	//			ID:          planID,
+	//			Name:        planName,
+	//			Description: chartVersion.Description,
+	//			Free:        boolPtr(true),
+	//		}
+	//		svc.Plans = append(svc.Plans, plan)
+	//	}
+	//
+	services = append(services, svc)
+	//}
 
 	klog.V(4).Infof("minibroker: listed services")
 
@@ -288,7 +310,7 @@ func (c *Client) Provision(instanceID, serviceID, planID, namespace string, acce
 	klog.V(3).Infof("minibroker: provisioning intance %q, service %q, namespace %q, params %v", instanceID, serviceID, namespace, provisionParams)
 	ctx := context.TODO()
 
-	chartName := serviceID
+	//chartName := serviceID
 	// The way I'm turning charts into plans is not reversible
 	chartVersion := strings.Replace(planID, serviceID+"-", "", 1)
 	chartVersion = strings.Replace(chartVersion, "-", ".", -1)
@@ -339,90 +361,90 @@ func (c *Client) Provision(instanceID, serviceID, planID, namespace string, acce
 		if err != nil {
 			return "", errors.Wrapf(err, "Failed to set operation key when provisioning instance %q", instanceID)
 		}
-		go func() {
-			err = c.provisionSynchronously(instanceID, namespace, serviceID, planID, chartName, chartVersion, provisionParams)
-			if err == nil {
-				err = c.updateConfigMap(instanceID, map[string]interface{}{
-					OperationStateKey:       string(osb.StateSucceeded),
-					OperationDescriptionKey: fmt.Sprintf("service instance %q provisioned", instanceID),
-				})
-			} else {
-				klog.V(2).Infof("minibroker: failed to provision %q: %v", instanceID, err)
-				err = c.updateConfigMap(instanceID, map[string]interface{}{
-					OperationStateKey:       string(osb.StateFailed),
-					OperationDescriptionKey: fmt.Sprintf("service instance %q failed to provision", instanceID),
-				})
-				if err != nil {
-					klog.V(2).Infof("minibroker: failed to provision %q: could not update operation state when provisioning asynchronously: %v", instanceID, err)
-				}
-			}
-		}()
+		//go func() {
+		//	err = c.provisionSynchronously(instanceID, namespace, serviceID, planID, chartName, chartVersion, provisionParams)
+		//	if err == nil {
+		//		err = c.updateConfigMap(instanceID, map[string]interface{}{
+		//			OperationStateKey:       string(osb.StateSucceeded),
+		//			OperationDescriptionKey: fmt.Sprintf("service instance %q provisioned", instanceID),
+		//		})
+		//	} else {
+		//		klog.V(2).Infof("minibroker: failed to provision %q: %v", instanceID, err)
+		//		err = c.updateConfigMap(instanceID, map[string]interface{}{
+		//			OperationStateKey:       string(osb.StateFailed),
+		//			OperationDescriptionKey: fmt.Sprintf("service instance %q failed to provision", instanceID),
+		//		})
+		//		if err != nil {
+		//			klog.V(2).Infof("minibroker: failed to provision %q: could not update operation state when provisioning asynchronously: %v", instanceID, err)
+		//		}
+		//	}
+		//}()
 		return operationKey, nil
 	}
 
-	err = c.provisionSynchronously(instanceID, namespace, serviceID, planID, chartName, chartVersion, provisionParams)
-	if err != nil {
-		return "", err
-	}
+	//err = c.provisionSynchronously(instanceID, namespace, serviceID, planID, chartName, chartVersion, provisionParams)
+	//if err != nil {
+	//	return "", err
+	//}
 
 	return "", nil
 }
 
 // provisionSynchronously will provision the service instance synchronously.
-func (c *Client) provisionSynchronously(instanceID, namespace, serviceID, planID, chartName, chartVersion string, provisionParams map[string]interface{}) error {
-	klog.V(3).Infof("minibroker: provisioning %s/%s using helm chart %s@%s", serviceID, planID, chartName, chartVersion)
-
-	chartDef, err := c.helm.GetChart(chartName, chartVersion)
-	if err != nil {
-		return err
-	}
-
-	release, err := c.helm.ChartClient().Install(chartDef, namespace, provisionParams)
-	if err != nil {
-		return err
-	}
-
-	// Store any required metadata necessary for bind and deprovision as labels on the resources itself
-	klog.V(3).Infof("minibroker: labeling chart resources with instance %q", instanceID)
-	filterByRelease := metav1.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{
-			ReleaseLabel: release.Name,
-		}).String(),
-	}
-	services, err := c.coreClient.CoreV1().Services(namespace).List(context.TODO(), filterByRelease)
-	if err != nil {
-		return err
-	}
-	for _, service := range services.Items {
-		err := c.labelService(service, instanceID, provisionParams)
-		if err != nil {
-			return err
-		}
-	}
-	secrets, err := c.coreClient.CoreV1().Secrets(namespace).List(context.TODO(), filterByRelease)
-	if err != nil {
-		return err
-	}
-	for _, secret := range secrets.Items {
-		err := c.labelSecret(secret, instanceID)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = c.updateConfigMap(instanceID, map[string]interface{}{
-		ReleaseLabel:        release.Name,
-		ReleaseNamespaceKey: release.Namespace,
-	})
-	if err != nil {
-		return errors.Wrapf(err, "could not update the instance configmap for %q", instanceID)
-	}
-
-	klog.V(4).Infof("minibroker: provisioned %v@%v (%v@%v)",
-		chartName, chartVersion, release.Name, release.Version)
-
-	return nil
-}
+//func (c *Client) provisionSynchronously(instanceID, namespace, serviceID, planID, chartName, chartVersion string, provisionParams map[string]interface{}) error {
+//	klog.V(3).Infof("minibroker: provisioning %s/%s using helm chart %s@%s", serviceID, planID, chartName, chartVersion)
+//
+//	chartDef, err := c.helm.GetChart(chartName, chartVersion)
+//	if err != nil {
+//		return err
+//	}
+//
+//	release, err := c.helm.ChartClient().Install(chartDef, namespace, provisionParams)
+//	if err != nil {
+//		return err
+//	}
+//
+//	// Store any required metadata necessary for bind and deprovision as labels on the resources itself
+//	klog.V(3).Infof("minibroker: labeling chart resources with instance %q", instanceID)
+//	filterByRelease := metav1.ListOptions{
+//		LabelSelector: labels.SelectorFromSet(map[string]string{
+//			ReleaseLabel: release.Name,
+//		}).String(),
+//	}
+//	services, err := c.coreClient.CoreV1().Services(namespace).List(context.TODO(), filterByRelease)
+//	if err != nil {
+//		return err
+//	}
+//	for _, service := range services.Items {
+//		err := c.labelService(service, instanceID, provisionParams)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//	secrets, err := c.coreClient.CoreV1().Secrets(namespace).List(context.TODO(), filterByRelease)
+//	if err != nil {
+//		return err
+//	}
+//	for _, secret := range secrets.Items {
+//		err := c.labelSecret(secret, instanceID)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//
+//	err = c.updateConfigMap(instanceID, map[string]interface{}{
+//		ReleaseLabel:        release.Name,
+//		ReleaseNamespaceKey: release.Namespace,
+//	})
+//	if err != nil {
+//		return errors.Wrapf(err, "could not update the instance configmap for %q", instanceID)
+//	}
+//
+//	klog.V(4).Infof("minibroker: provisioned %v@%v (%v@%v)",
+//		chartName, chartVersion, release.Name, release.Version)
+//
+//	return nil
+//}
 
 func (c *Client) labelService(service corev1.Service, instanceID string, params map[string]interface{}) error {
 	ctx := context.TODO()
@@ -739,9 +761,9 @@ func (c *Client) Deprovision(instanceID string, acceptsIncomplete bool) (string,
 func (c *Client) deprovisionSynchronously(instanceID, releaseName, namespace string) error {
 	ctx := context.TODO()
 
-	if err := c.helm.ChartClient().Uninstall(releaseName, namespace); err != nil {
-		return errors.Wrapf(err, "could not uninstall release %s", releaseName)
-	}
+	//if err := c.helm.ChartClient().Uninstall(releaseName, namespace); err != nil {
+	//	return errors.Wrapf(err, "could not uninstall release %s", releaseName)
+	//}
 
 	err := c.coreClient.CoreV1().
 		ConfigMaps(c.namespace).

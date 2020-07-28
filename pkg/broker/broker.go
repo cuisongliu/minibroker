@@ -21,9 +21,9 @@ import (
 	"sync"
 
 	"github.com/kubernetes-sigs/minibroker/pkg/minibroker"
-	osb "github.com/pmorie/go-open-service-broker-client/v2"
-	"github.com/pmorie/osb-broker-lib/pkg/broker"
+	"github.com/kubernetes-sigs/minibroker/pkg/osb-broker-lib/broker"
 	klog "k8s.io/klog/v2"
+	osb "sigs.k8s.io/go-open-service-broker-client/v2"
 )
 
 // NewBroker is a hook that is called with the Options the program is run
@@ -32,10 +32,6 @@ import (
 func NewBroker(o Options) (*Broker, error) {
 	klog.V(5).Infof("broker: creating a new broker with options %+v", o)
 	mb := minibroker.NewClient(o.ConfigNamespace, o.ServiceCatalogEnabledOnly)
-	err := mb.Init(o.HelmRepoURL)
-	if err != nil {
-		return nil, err
-	}
 
 	// For example, if your Broker requires a parameter from the command
 	// line, you would unpack it from the Options and set it on the

@@ -1,0 +1,9 @@
+apiVersion: servicecatalog.k8s.io/v1beta1
+kind: ServiceBinding
+metadata:
+  name: mariadb-10-1-26-binding
+  namespace: catalog
+spec:
+  instanceRef:
+    name: mariadb-10-1-26-instance
+  secretName: mariadb-10-1-26-secret

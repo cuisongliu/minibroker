@@ -27,12 +27,12 @@ import (
 	"syscall"
 
 	"github.com/kubernetes-sigs/minibroker/pkg/broker"
-	"github.com/pmorie/osb-broker-lib/pkg/metrics"
+	"github.com/kubernetes-sigs/minibroker/pkg/osb-broker-lib/metrics"
 	prom "github.com/prometheus/client_golang/prometheus"
 	klog "k8s.io/klog/v2"
 
-	"github.com/pmorie/osb-broker-lib/pkg/rest"
-	"github.com/pmorie/osb-broker-lib/pkg/server"
+	"github.com/kubernetes-sigs/minibroker/pkg/osb-broker-lib/rest"
+	"github.com/kubernetes-sigs/minibroker/pkg/osb-broker-lib/server"
 )
 
 var (
@@ -59,9 +59,7 @@ func main() {
 		"base-64 encoded PEM block to use as the private key matching the TLS certificate. If '--tlsKey' is used, then '--tlsCert' must also be used")
 	flag.StringVar(&options.CatalogPath, "catalogPath", "",
 		"The path to the catalog")
-	flag.StringVar(&options.HelmRepoURL, "helmUrl", "",
-		"The url to the helm repo")
-	flag.StringVar(&options.DefaultNamespace, "defaultNamespace", "",
+	flag.StringVar(&options.DefaultNamespace, "defaultNamespace", "catalog",
 		"The default namespace for brokers when the request doesn't specify")
 	flag.Parse()
 
@@ -103,7 +101,7 @@ func runWithContext(ctx context.Context) error {
 
 	addr := ":" + strconv.Itoa(options.Port)
 
-	options.Options.ConfigNamespace = os.Getenv("CONFIG_NAMESPACE")
+	options.Options.ConfigNamespace = options.DefaultNamespace
 
 	b, err := broker.NewBroker(options.Options)
 	if err != nil {

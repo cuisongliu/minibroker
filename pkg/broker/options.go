@@ -17,7 +17,6 @@ limitations under the License.
 package broker
 
 type Options struct {
-	HelmRepoURL string
 	CatalogPath string
 	// The namespace where Minibroker stores configmaps.
 	ConfigNamespace string
