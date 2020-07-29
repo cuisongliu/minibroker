@@ -1,0 +1,12 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: mariadb-10-1-26-instance-svc
+  namespace: catalog
+  labels:
+    minibroker.instance: mariadb-10-1-26-instance
+spec:
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8005

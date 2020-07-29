@@ -207,7 +207,7 @@ func (c *Client) updateConfigMap(instanceID string, data map[string]interface{})
 			panic(fmt.Sprintf("Invalid data (key %s), has value %+v", name, value))
 		}
 	}
-
+	config.Data[ReleaseNamespaceKey] = config.Namespace
 	configMapInterface := c.coreClient.CoreV1().ConfigMaps(c.namespace)
 	_, err = configMapInterface.Update(context.TODO(), config, metav1.UpdateOptions{})
 	if err != nil {
@@ -354,7 +354,7 @@ func (c *Client) Provision(instanceID, serviceID, planID, namespace string, acce
 	if acceptsIncomplete {
 		operationKey := generateOperationName(OperationPrefixProvision)
 		err = c.updateConfigMap(instanceID, map[string]interface{}{
-			OperationStateKey:       string(osb.StateInProgress),
+			OperationStateKey:       string(osb.StateSucceeded),
 			OperationNameKey:        operationKey,
 			OperationDescriptionKey: fmt.Sprintf("provisioning service instance %q", instanceID),
 		})
